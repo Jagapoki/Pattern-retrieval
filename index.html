@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PATTERN RETRIEVAL — THE GAME</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323:wght@400&display=swap');
+
+:root {
+  --g: #39ff5a;
+  --gdim: #1a6630;
+  --gfaint: #0a2210;
+  --bg: #010a03;
+  --cyan: #00ffe5;
+  --amber: #ffb347;
+  --red: #ff4444;
+  --white: #c8ffd4;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--g);
+  font-family: 'Share Tech Mono', monospace;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  overflow-x: hidden;
+  position: relative;
+  padding: 0 8px 40px;
+}
+
+/* CRT vignette */
+body::before {
+  content:'';
+  position:fixed;inset:0;
+  background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,0.85) 100%);
+  pointer-events:none;z-index:200;
+}
+/* Scanlines */
+body::after {
+  content:'';
+  position:fixed;inset:0;
+  background: repeating-linear-gradient(0deg,rgba(0,0,0,0.13) 0,rgba(0,0,0,0.13) 1px,transparent 1px,transparent 3px);
+  pointer-events:none;z-index:201;
+  animation: scanroll 10s linear infinite;
+}
+@keyframes scanroll { to { background-position: 0 300px; } }
+
+/* Global flicker */
+@keyframes flicker {
+  0%,94%,100%{opacity:1}95%{opacity:.88}97%{opacity:1}98%{opacity:.82}99%{opacity:1}
+}
+.flicker { animation: flicker 7s infinite; }
+
+/* ─── SCREENS ─────────────────── */
+.screen { display:none; width:100%; max-width:660px; flex-direction:column; align-items:center; }
+.screen.active { display:flex; }
+
+/* ─── TOPBAR ──────────────────── */
+.topbar {
+  width:100%;max-width:660px;
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:.6rem;letter-spacing:.18em;
+  color:var(--gdim);
+  border-bottom:1px solid var(--gdim);
+  padding:10px 0 6px;
+  margin-bottom:16px;
+  position:sticky;top:0;background:var(--bg);z-index:50;
+  flex-shrink:0;
+}
+.topbar .blink { color:var(--g); animation:blink 1s step-end infinite; }
+@keyframes blink { 50%{opacity:0} }
+
+/* ─── TITLE SCREEN ─────────────── */
+#screen-title { gap:0; padding-top: 20px; }
+
+.ascii-logo {
+  font-family:'VT323',monospace;
+  font-size:clamp(2rem,8vw,3.6rem);
+  line-height:1.05;
+  color:var(--g);
+  text-shadow:0 0 14px var(--g),0 0 40px rgba(57,255,90,.3);
+  text-align:center;
+  letter-spacing:.08em;
+  margin:12px 0 4px;
+}
+.ascii-sub {
+  font-size:.62rem;letter-spacing:.25em;color:var(--gdim);
+  text-align:center;margin-bottom:28px;
+}
+
+.tagline {
+  font-size:.68rem;letter-spacing:.15em;color:var(--white);
+  text-align:center;line-height:2;margin-bottom:28px;
+  max-width:440px;
+}
+.tagline em { color:var(--cyan);font-style:normal; }
+
+.btn {
+  font-family:'Share Tech Mono',monospace;
+  font-size:.75rem;letter-spacing:.25em;
+  color:var(--bg);background:var(--g);
+  border:none;padding:12px 32px;cursor:pointer;
+  text-transform:uppercase;
+  box-shadow:0 0 16px var(--g),0 0 40px rgba(57,255,90,.3);
+  transition:all .15s;
+  margin:4px;
+}
+.btn:hover { background:var(--cyan); box-shadow:0 0 20px var(--cyan); color:var(--bg); }
+.btn.outline {
+  background:transparent;color:var(--g);
+  border:1px solid var(--g);
+  box-shadow:none;
+}
+.btn.outline:hover { background:rgba(57,255,90,.08); }
+
+.how-box {
+  border:1px solid rgba(57,255,90,.2);
+  padding:16px 20px;margin:20px 0;width:100%;
+  font-size:.6rem;letter-spacing:.1em;line-height:2;
+  color:var(--gdim);position:relative;
+}
+.how-box::before {
+  content:'◆ HOW TO PLAY';
+  position:absolute;top:-8px;left:10px;
+  background:var(--bg);padding:0 6px;
+  font-size:.55rem;color:var(--gdim);letter-spacing:.2em;
+}
+.how-box span { color:var(--g); }
+
+/* ─── GAME SCREEN ──────────────── */
+#screen-game { gap:10px; padding-top:10px; }
+
+.hud {
+  width:100%;display:flex;justify-content:space-between;align-items:center;
+  font-size:.62rem;letter-spacing:.12em;gap:10px;flex-wrap:wrap;
+}
+.hud-block { display:flex;flex-direction:column;gap:2px; }
+.hud-label { font-size:.5rem;color:var(--gdim);letter-spacing:.2em; }
+.hud-val { color:var(--g);font-size:.75rem;letter-spacing:.1em; }
+.hud-val.amber { color:var(--amber);text-shadow:0 0 6px var(--amber); }
+.hud-val.red { color:var(--red);text-shadow:0 0 6px var(--red); }
+.hud-val.cyan { color:var(--cyan);text-shadow:0 0 6px var(--cyan); }
+
+/* Timer bar */
+.timer-track {
+  width:100%;height:4px;
+  background:rgba(57,255,90,.1);
+  border:1px solid var(--gdim);
+  margin-bottom:4px;
+}
+.timer-fill {
+  height:100%;background:var(--g);
+  box-shadow:0 0 8px var(--g);
+  transition:width .1s linear,background .3s;
+}
+
+/* Noise vs signal hint */
+.noise-hud {
+  width:100%;display:flex;align-items:center;gap:8px;
+  font-size:.55rem;letter-spacing:.12em;color:var(--gdim);
+}
+.noise-hud .ntrack { flex:1;height:3px;background:rgba(255,68,68,.15);border:1px solid rgba(255,68,68,.3); }
+.noise-hud .nfill { height:100%;background:var(--red);box-shadow:0 0 4px var(--red); }
+
+/* ─── GAME CANVAS AREA ─────────── */
+.canvas-wrap {
+  position:relative;width:100%;display:flex;flex-direction:column;align-items:center;
+}
+
+#gameCanvas {
+  display:block;
+  image-rendering:pixelated;
+  max-width:100%;
+  cursor:crosshair;
+  border:1px solid rgba(57,255,90,.2);
+  box-shadow:0 0 20px rgba(57,255,90,.15),inset 0 0 40px rgba(0,0,0,.5);
+}
+
+.phase-badge {
+  font-family:'VT323',monospace;
+  font-size:1rem;letter-spacing:.3em;
+  color:var(--g);text-shadow:0 0 10px var(--g);
+  margin-top:6px;text-align:center;
+  min-height:24px;
+}
+
+/* bottom row */
+.game-footer {
+  width:100%;display:flex;justify-content:space-between;align-items:center;
+  font-size:.58rem;letter-spacing:.1em;color:var(--gdim);
+  border-top:1px solid rgba(57,255,90,.12);padding-top:8px;
+}
+
+/* Lives */
+.lives { display:flex;gap:6px;align-items:center; }
+.life { width:10px;height:10px;background:var(--g);box-shadow:0 0 5px var(--g); }
+.life.lost { background:rgba(57,255,90,.1);box-shadow:none;border:1px solid var(--gdim); }
+
+/* Combo */
+.combo-pop {
+  position:absolute;top:10px;right:10px;
+  font-family:'VT323',monospace;font-size:1.6rem;
+  color:var(--cyan);text-shadow:0 0 12px var(--cyan);
+  opacity:0;pointer-events:none;
+  transition:opacity .3s,transform .4s;
+}
+.combo-pop.show { opacity:1;transform:translateY(-10px); }
+
+/* ─── RESULT / GAMEOVER ────────── */
+#screen-result, #screen-gameover { gap:14px; padding-top:30px; }
+
+.result-title {
+  font-family:'VT323',monospace;
+  font-size:clamp(2.5rem,10vw,4rem);
+  letter-spacing:.1em;text-align:center;
+  text-shadow:0 0 20px currentColor;
+}
+.result-title.win { color:var(--cyan); }
+.result-title.fail { color:var(--red); }
+
+.result-grid {
+  width:100%;display:grid;grid-template-columns:1fr 1fr;gap:10px;
+  font-size:.62rem;letter-spacing:.1em;
+}
+.result-cell {
+  border:1px solid rgba(57,255,90,.2);padding:10px 14px;
+  background:rgba(57,255,90,.03);
+}
+.result-cell .rl { color:var(--gdim);font-size:.52rem;letter-spacing:.2em;margin-bottom:3px; }
+.result-cell .rv { color:var(--g);font-size:.85rem; }
+
+.ticker-wrap {
+  width:100%;overflow:hidden;
+  border-top:1px solid rgba(57,255,90,.12);
+  border-bottom:1px solid rgba(57,255,90,.12);
+  padding:4px 0;
+}
+.ticker {
+  display:inline-block;white-space:nowrap;
+  animation:ticker 20s linear infinite;
+  font-size:.55rem;letter-spacing:.2em;color:var(--gdim);
+}
+@keyframes ticker { 0%{transform:translateX(100vw)} 100%{transform:translateX(-100%)} }
+.ticker .hl { color:var(--g); }
+
+/* Instruction ghost overlay */
+.ghost-hint {
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:'VT323',monospace;font-size:1.2rem;letter-spacing:.2em;
+  color:rgba(57,255,90,.5);text-align:center;pointer-events:none;
+  text-shadow:0 0 10px var(--g);
+  animation:fadeout 2.5s ease forwards;
+}
+@keyframes fadeout { 0%{opacity:1}70%{opacity:1}100%{opacity:0} }
+
+</style>
+</head>
+<body class="flicker">
+
+<div class="topbar">
+  <span>PATTERN RETRIEVAL // INTERACTIVE</span>
+  <span class="blink">■ SYSTEM ONLINE</span>
+  <span id="sys-time">λ=0.35</span>
+</div>
+
+<!-- ══════════════════ TITLE SCREEN ══════════════════ -->
+<div class="screen active" id="screen-title">
+  <div class="ascii-logo">PATTERN<br>RETRIEVAL</div>
+  <div class="ascii-sub">THE GAME · HEBBIAN EDITION</div>
+
+  <div class="tagline">
+    Every character is a <em>memory under pressure</em>.<br>
+    Noise corrupts. You restore.<br>
+    The network judges.
+  </div>
+
+  <div class="how-box">
+    <span>PHASE 1 — OBSERVE:</span> Study the clean glyph for 2 seconds.<br>
+    <span>PHASE 2 — SHATTER:</span> Watch noise corrupt it into static.<br>
+    <span>PHASE 3 — RECALL:</span> Click / tap cells to flip them.<br>
+    Reconstruct the original pattern before time runs out.<br><br>
+    <span>SCORING:</span> Speed bonus + accuracy bonus + combo chain.<br>
+    <span>LIVES:</span> 3 · lose one per failed retrieval.<br>
+    <span>LEVELS:</span> Each round adds more noise &amp; less time.
+  </div>
+
+  <button class="btn" onclick="startGame()">▸ BEGIN RETRIEVAL</button>
+  <button class="btn outline" style="margin-top:8px" onclick="showHowScreen()">◆ HOW IT WORKS</button>
+
+  <div class="ticker-wrap" style="margin-top:28px">
+    <span class="ticker">
+      ASCII // 32–126 &nbsp;·&nbsp; <span class="hl">PATTERN RETRIEVAL</span> &nbsp;·&nbsp; HOPFIELD NETWORK &nbsp;·&nbsp; HEBBIAN LEARNING &nbsp;·&nbsp; λ=0.35 &nbsp;·&nbsp; ONCHAIN GENERATIVE ART &nbsp;·&nbsp; 478 SPECIMENS &nbsp;·&nbsp; @adamilenich &nbsp;·&nbsp; SHATTERING · RECALLING &nbsp;·&nbsp;
+    </span>
+  </div>
+</div>
+
+<!-- ══════════════════ GAME SCREEN ══════════════════ -->
+<div class="screen" id="screen-game">
+
+  <div class="hud">
+    <div class="hud-block">
+      <div class="hud-label">SCORE</div>
+      <div class="hud-val cyan" id="hud-score">000000</div>
+    </div>
+    <div class="hud-block" style="align-items:center">
+      <div class="hud-label">SPECIMEN</div>
+      <div class="hud-val" id="hud-char" style="font-size:1.4rem;text-shadow:0 0 10px var(--g)">?</div>
+    </div>
+    <div class="hud-block" style="align-items:center">
+      <div class="hud-label">LEVEL</div>
+      <div class="hud-val amber" id="hud-level">01</div>
+    </div>
+    <div class="hud-block" style="align-items:center">
+      <div class="hud-label">COMBO</div>
+      <div class="hud-val" id="hud-combo">×1</div>
+    </div>
+    <div class="lives" id="hud-lives">
+      <div class="hud-label" style="margin-right:4px">LIVES</div>
+    </div>
+  </div>
+
+  <div class="timer-track"><div class="timer-fill" id="timer-fill"></div></div>
+
+  <div class="noise-hud">
+    <span>NOISE</span>
+    <div class="ntrack"><div class="nfill" id="noise-fill" style="width:0%"></div></div>
+    <span id="noise-pct">0%</span>
+    <span style="margin-left:auto" id="pass-label">PASS: 000</span>
+  </div>
+
+  <div class="canvas-wrap">
+    <canvas id="gameCanvas"></canvas>
+    <div class="combo-pop" id="combo-pop">COMBO!</div>
+  </div>
+
+  <div class="phase-badge" id="phase-badge">LOADING...</div>
+
+  <div class="game-footer">
+    <div class="lives" id="lives-display"></div>
+    <span id="accuracy-label">ACCURACY: ---%</span>
+    <button class="btn outline" style="font-size:.5rem;padding:6px 12px" onclick="quitGame()">✕ QUIT</button>
+  </div>
+
+</div>
+
+<!-- ══════════════════ ROUND RESULT ══════════════════ -->
+<div class="screen" id="screen-result">
+  <div class="result-title" id="result-title">RETRIEVED</div>
+  <div style="font-size:.6rem;letter-spacing:.2em;color:var(--gdim);margin-top:-8px" id="result-sub">PATTERN RESTORED</div>
+
+  <canvas id="resultCanvas" style="margin:12px 0;border:1px solid rgba(57,255,90,.2);image-rendering:pixelated;max-width:90%"></canvas>
+
+  <div class="result-grid">
+    <div class="result-cell"><div class="rl">ACCURACY</div><div class="rv" id="r-accuracy">---%</div></div>
+    <div class="result-cell"><div class="rl">TIME BONUS</div><div class="rv" id="r-time">+0</div></div>
+    <div class="result-cell"><div class="rl">COMBO</div><div class="rv" id="r-combo">×1</div></div>
+    <div class="result-cell"><div class="rl">POINTS</div><div class="rv cyan" id="r-points">0</div></div>
+  </div>
+
+  <button class="btn" id="result-continue" onclick="nextRound()" style="margin-top:10px">▸ NEXT SPECIMEN</button>
+</div>
+
+<!-- ══════════════════ GAME OVER ══════════════════ -->
+<div class="screen" id="screen-gameover">
+  <div class="result-title fail">ENTROPY</div>
+  <div style="font-size:.6rem;letter-spacing:.25em;color:var(--gdim)">PATTERN LOST TO NOISE</div>
+
+  <div class="result-grid" style="margin-top:16px">
+    <div class="result-cell"><div class="rl">FINAL SCORE</div><div class="rv cyan" id="go-score">0</div></div>
+    <div class="result-cell"><div class="rl">LEVEL REACHED</div><div class="rv amber" id="go-level">1</div></div>
+    <div class="result-cell"><div class="rl">SPECIMENS</div><div class="rv" id="go-specimens">0</div></div>
+    <div class="result-cell"><div class="rl">BEST COMBO</div><div class="rv" id="go-combo">×1</div></div>
+  </div>
+
+  <div style="border:1px solid rgba(57,255,90,.2);padding:14px 18px;margin:16px 0;width:100%;font-size:.6rem;letter-spacing:.1em;line-height:2;color:var(--gdim);position:relative;">
+    <div style="position:absolute;top:-7px;left:10px;background:var(--bg);padding:0 4px;font-size:.52rem;color:var(--gdim);letter-spacing:.2em">◆ TERMINAL LOG</div>
+    <span style="color:var(--g)">RECALL FAILED.</span> The network settled into an attractor that was never stored. The pattern exists in the weights — but entropy won this time. Try again. The memory is still there, waiting to be pulled from the noise.
+  </div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+    <button class="btn" onclick="startGame()">▸ RETRY</button>
+    <button class="btn outline" onclick="showScreen('screen-title')">◂ TITLE</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  PATTERN RETRIEVAL — THE GAME
+//  Hopfield-inspired ASCII reconstruction puzzle
+// ═══════════════════════════════════════════════════════
+
+// ─── Glyph Library (8×8 pixel art, 64 bits each) ─────
+// Row-major: top to bottom, left to right
+const GLYPHS = {
+  'A': [0,0,1,1,1,1,0,0,
+        0,1,1,0,0,1,1,0,
+        1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        1,1,1,1,1,1,1,1,
+        1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        0,0,0,0,0,0,0,0],
+
+  'B': [1,1,1,1,1,1,0,0,
+        1,1,0,0,0,1,1,0,
+        1,1,0,0,0,1,1,0,
+        1,1,1,1,1,1,0,0,
+        1,1,0,0,0,1,1,0,
+        1,1,0,0,0,1,1,0,
+        1,1,1,1,1,1,0,0,
+        0,0,0,0,0,0,0,0],
+
+  'E': [1,1,1,1,1,1,1,1,
+        1,1,0,0,0,0,0,0,
+        1,1,0,0,0,0,0,0,
+        1,1,1,1,1,1,0,0,
+        1,1,0,0,0,0,0,0,
+        1,1,0,0,0,0,0,0,
+        1,1,1,1,1,1,1,1,
+        0,0,0,0,0,0,0,0],
+
+  'H': [1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        1,1,1,1,1,1,1,1,
+        1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        0,0,0,0,0,0,0,0],
+
+  'N': [1,1,0,0,0,0,1,1,
+        1,1,1,0,0,0,1,1,
+        1,1,1,1,0,0,1,1,
+        1,1,0,1,1,0,1,1,
+        1,1,0,0,1,1,1,1,
+        1,1,0,0,0,1,1,1,
+        1,1,0,0,0,0,1,1,
+        0,0,0,0,0,0,0,0],
+
+  'O': [0,1,1,1,1,1,1,0,
+        1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        0,1,1,1,1,1,1,0,
+        0,0,0,0,0,0,0,0],
+
+  'P': [1,1,1,1,1,1,0,0,
+        1,1,0,0,0,1,1,0,
+        1,1,0,0,0,1,1,0,
+        1,1,1,1,1,1,0,0,
+        1,1,0,0,0,0,0,0,
+        1,1,0,0,0,0,0,0,
+        1,1,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0],
+
+  'R': [1,1,1,1,1,1,0,0,
+        1,1,0,0,0,1,1,0,
+        1,1,0,0,0,1,1,0,
+        1,1,1,1,1,1,0,0,
+        1,1,0,1,1,0,0,0,
+        1,1,0,0,1,1,0,0,
+        1,1,0,0,0,1,1,0,
+        0,0,0,0,0,0,0,0],
+
+  'T': [1,1,1,1,1,1,1,1,
+        0,0,0,1,1,0,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,0,0,0,0,0,0],
+
+  'W': [1,1,0,0,0,0,1,1,
+        1,1,0,0,0,0,1,1,
+        1,1,0,1,1,0,1,1,
+        1,1,0,1,1,0,1,1,
+        1,1,1,0,0,1,1,1,
+        0,1,1,0,0,1,1,0,
+        0,0,1,0,0,1,0,0,
+        0,0,0,0,0,0,0,0],
+
+  'X': [1,1,0,0,0,0,1,1,
+        0,1,1,0,0,1,1,0,
+        0,0,1,1,1,1,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,1,1,1,1,0,0,
+        0,1,1,0,0,1,1,0,
+        1,1,0,0,0,0,1,1,
+        0,0,0,0,0,0,0,0],
+
+  'Z': [1,1,1,1,1,1,1,1,
+        0,0,0,0,0,1,1,0,
+        0,0,0,0,1,1,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,1,1,0,0,0,0,
+        0,1,1,0,0,0,0,0,
+        1,1,1,1,1,1,1,1,
+        0,0,0,0,0,0,0,0],
+
+  '!': [0,0,0,1,1,0,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,0,0,0,0,0,0,
+        0,0,0,1,1,0,0,0,
+        0,0,0,0,0,0,0,0],
+
+  '#': [0,1,0,1,0,1,0,1,
+        1,1,1,1,1,1,1,1,
+        0,1,0,1,0,1,0,1,
+        1,1,1,1,1,1,1,1,
+        0,1,0,1,0,1,0,1,
+        1,1,1,1,1,1,1,1,
+        0,1,0,1,0,1,0,1,
+        0,0,0,0,0,0,0,0],
+
+  '@': [0,1,1,1,1,1,0,0,
+        1,1,0,0,0,1,1,0,
+        1,1,0,1,1,1,0,0,
+        1,1,0,1,0,1,0,0,
+        1,1,0,1,1,0,0,0,
+        1,1,0,0,0,0,0,0,
+        0,1,1,1,1,1,1,0,
+        0,0,0,0,0,0,0,0],
+};
+
+const GLYPH_KEYS = Object.keys(GLYPHS);
+const ROWS = 8, COLS = 8, N = 64;
+const CELL = Math.min(Math.floor((Math.min(window.innerWidth,660) - 40) / 8 / 2) * 2, 54);
+
+// ─── Game state ───────────────────────────────────────
+let score = 0, level = 1, lives = 3, combo = 1, maxCombo = 1;
+let specimensCleared = 0, totalAttempts = 0;
+let currentChar = '', target = [], playerState = [];
+let phase = 'idle'; // idle|memorize|shatter|play|judging
+let timeLeft = 0, totalTime = 0;
+let noiseLevel = 0;
+let timerInterval = null;
+let shatterFrame = 0, shatterAnim = null;
+
+// ─── Canvas setup ─────────────────────────────────────
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width  = COLS * CELL;
+canvas.height = ROWS * CELL;
+
+// Result canvas (smaller)
+const rCanvas = document.getElementById('resultCanvas');
+const rCtx = rCanvas.getContext('2d');
+const RC = Math.min(CELL, 36);
+rCanvas.width  = COLS * RC;
+rCanvas.height = ROWS * RC;
+
+// ─── Drawing ──────────────────────────────────────────
+function drawState(c, ct, state, showTarget=false, noiseState=null) {
+  ct.clearRect(0,0,c.width,c.height);
+  ct.fillStyle = '#010a03';
+  ct.fillRect(0,0,c.width,c.height);
+  const sz = c.width / COLS;
+
+  for (let i = 0; i < N; i++) {
+    const r = Math.floor(i/COLS), col = i%COLS;
+    const x = col*sz, y = r*sz;
+    const on = state[i] > 0;
+    const tgt = showTarget ? target[i] > 0 : null;
+
+    if (on) {
+      let color = '#39ff5a';
+      let glow  = '#39ff5a';
+      if (showTarget && tgt !== null) {
+        color = on === tgt ? '#39ff5a' : '#ff4444'; // red = wrong
+        glow  = color;
+      }
+      ct.fillStyle = color;
+      ct.shadowColor = glow;
+      ct.shadowBlur = 6;
+      ct.fillRect(x+1,y+1,sz-2,sz-2);
+      ct.shadowBlur = 0;
+    } else if (showTarget && tgt) {
+      // should be on — ghost
+      ct.fillStyle = '#0d3318';
+      ct.fillRect(x+1,y+1,sz-2,sz-2);
+    }
+
+    // grid lines
+    ct.strokeStyle = 'rgba(57,255,90,0.07)';
+    ct.lineWidth = 0.5;
+    ct.strokeRect(x,y,sz,sz);
+  }
+}
+
+function drawClean() { drawState(canvas, ctx, target.map(v=>v)); }
+function drawPlayer(showFeedback=false) { drawState(canvas, ctx, playerState, showFeedback); }
+
+// ─── Noise / Shatter ──────────────────────────────────
+function applyNoise(base, noiseAmt) {
+  const s = base.slice();
+  const n = Math.floor(noiseAmt * N);
+  const idx = Array.from({length:N},(_,i)=>i);
+  for (let i=0;i<n;i++) {
+    const j = i + Math.floor(Math.random()*(N-i));
+    [idx[i],idx[j]]=[idx[j],idx[i]];
+    s[idx[i]] = s[idx[i]] > 0 ? -1 : 1;
+  }
+  return s;
+}
+
+// ─── Screen management ────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function showHowScreen() { showScreen('screen-title'); }
+
+// ─── HUD ──────────────────────────────────────────────
+function updateHUD() {
+  document.getElementById('hud-score').textContent = String(score).padStart(6,'0');
+  document.getElementById('hud-level').textContent = String(level).padStart(2,'0');
+  document.getElementById('hud-combo').textContent = '×'+combo;
+  document.getElementById('hud-char').textContent = currentChar;
+
+  // lives
+  const ld = document.getElementById('lives-display');
+  ld.innerHTML = '<span class="hud-label" style="margin-right:4px">LIVES</span>';
+  for (let i=0;i<3;i++) {
+    const d = document.createElement('div');
+    d.className = 'life' + (i >= lives ? ' lost' : '');
+    ld.appendChild(d);
+  }
+}
+
+function updateNoiseBar(pct) {
+  document.getElementById('noise-fill').style.width = pct+'%';
+  document.getElementById('noise-pct').textContent = Math.round(pct)+'%';
+}
+
+function updateTimerBar() {
+  const pct = timeLeft/totalTime*100;
+  const fill = document.getElementById('timer-fill');
+  fill.style.width = pct+'%';
+  fill.style.background = pct > 50 ? 'var(--g)' : pct > 25 ? 'var(--amber)' : 'var(--red)';
+  fill.style.boxShadow = pct > 50 ? '0 0 8px var(--g)' : pct > 25 ? '0 0 8px var(--amber)' : '0 0 8px var(--red)';
+}
+
+function setPhaseBadge(txt, color='var(--g)') {
+  const el = document.getElementById('phase-badge');
+  el.textContent = txt;
+  el.style.color = color;
+  el.style.textShadow = `0 0 10px ${color}`;
+}
+
+function setAccuracy() {
+  const correct = playerState.filter((v,i)=>v===target[i]).length;
+  const pct = Math.round(correct/N*100);
+  document.getElementById('accuracy-label').textContent = `ACCURACY: ${pct}%`;
+  return pct;
+}
+
+// ─── Pick next character ───────────────────────────────
+function pickChar() {
+  const k = GLYPH_KEYS[Math.floor(Math.random()*GLYPH_KEYS.length)];
+  currentChar = k;
+  target = GLYPHS[k].map(v => v ? 1 : -1);
+}
+
+// ─── Level params ─────────────────────────────────────
+function levelNoise()   { return Math.min(0.25 + (level-1)*0.07, 0.72); }
+function levelTime()    { return Math.max(14000 - (level-1)*1200, 5000); }
+function memorizeTime() { return Math.max(2200 - (level-1)*100, 1000); }
+function shatterTime()  { return 1800; }
+
+// ─── Start game ───────────────────────────────────────
+function startGame() {
+  score = 0; level = 1; lives = 3; combo = 1; maxCombo = 1;
+  specimensCleared = 0;
+  showScreen('screen-game');
+  beginRound();
+}
+
+function nextRound() {
+  level++;
+  showScreen('screen-game');
+  beginRound();
+}
+
+function quitGame() { showScreen('screen-title'); clearAll(); }
+
+function clearAll() {
+  clearTimeout(timerInterval);
+  cancelAnimationFrame(shatterAnim);
+}
+
+// ─── Round flow ───────────────────────────────────────
+function beginRound() {
+  clearAll();
+  pickChar();
+  playerState = target.slice(); // start clean
+  noiseLevel = 0;
+  updateHUD();
+  updateNoiseBar(0);
+  document.getElementById('pass-label').textContent = 'PASS: 000';
+
+  // PHASE 1: MEMORIZE
+  phase = 'memorize';
+  setPhaseBadge('▸ MEMORIZE · STUDY THE PATTERN', 'var(--cyan)');
+  drawClean();
+  canvas.style.pointerEvents = 'none';
+
+  setTimeout(() => doShatter(), memorizeTime());
+}
+
+function doShatter() {
+  phase = 'shatter';
+  setPhaseBadge('▸ SHATTERING...', 'var(--red)');
+  canvas.style.pointerEvents = 'none';
+
+  let noiseProgress = 0;
+  const targetNoise = levelNoise();
+  const steps = 24;
+  const stepDelay = shatterTime() / steps;
+  let step = 0;
+
+  function shatterStep() {
+    step++;
+    noiseProgress = (step/steps) * targetNoise;
+    noiseLevel = noiseProgress;
+    const display = applyNoise(target, noiseProgress);
+    drawState(canvas, ctx, display);
+    updateNoiseBar(noiseProgress*100);
+
+    if (step < steps) {
+      shatterAnim = setTimeout(shatterStep, stepDelay);
+    } else {
+      // Freeze on noisy state — player starts from noise
+      playerState = applyNoise(target, targetNoise);
+      drawPlayer();
+      startPlayPhase();
+    }
+  }
+  shatterStep();
+}
+
+function startPlayPhase() {
+  phase = 'play';
+  setPhaseBadge('▸ RECALL — RESTORE THE PATTERN', 'var(--g)');
+  canvas.style.pointerEvents = 'auto';
+
+  totalTime = levelTime();
+  timeLeft = totalTime;
+
+  // Show ghost hint briefly
+  const hint = document.createElement('div');
+  hint.className = 'ghost-hint';
+  hint.textContent = 'TAP CELLS TO FLIP';
+  document.querySelector('.canvas-wrap').appendChild(hint);
+  setTimeout(() => hint.remove(), 2500);
+
+  timerInterval = setInterval(() => {
+    timeLeft -= 100;
+    updateTimerBar();
+    setAccuracy();
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      judgeRound(false);
+    }
+  }, 100);
+}
+
+// ─── Cell click / tap ─────────────────────────────────
+canvas.addEventListener('click', onCellClick);
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  onCellClick(t);
+}, {passive:false});
+
+function onCellClick(e) {
+  if (phase !== 'play') return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  const col = Math.floor(mx / CELL);
+  const row = Math.floor(my / CELL);
+  if (col < 0||col >= COLS||row < 0||row >= ROWS) return;
+  const i = row*COLS+col;
+  playerState[i] = playerState[i] > 0 ? -1 : 1;
+  drawPlayer();
+  setAccuracy();
+
+  // Check auto-complete
+  const correct = playerState.filter((v,i)=>v===target[i]).length;
+  if (correct === N) {
+    clearInterval(timerInterval);
+    judgeRound(true, true);
+  }
+}
+
+// ─── Judge ────────────────────────────────────────────
+function judgeRound(manualComplete=false, perfect=false) {
+  phase = 'judging';
+  canvas.style.pointerEvents = 'none';
+  clearInterval(timerInterval);
+
+  const correctCells = playerState.filter((v,i)=>v===target[i]).length;
+  const accuracy = correctCells / N;
+  const success = accuracy >= 0.80 || perfect;
+
+  // Flash feedback
+  drawState(canvas, ctx, playerState, true);
+
+  setTimeout(() => {
+    if (success) {
+      specimensCleared++;
+      const timeBonus = Math.floor((timeLeft/totalTime) * 500 * level);
+      const accBonus  = Math.floor(accuracy * 800 * level);
+      const comboBonus = combo * 100;
+      const roundPts = timeBonus + accBonus + comboBonus;
+      score += roundPts;
+      combo = Math.min(combo+1, 8);
+      maxCombo = Math.max(maxCombo, combo);
+
+      // combo pop
+      if (combo > 2) {
+        const pop = document.getElementById('combo-pop');
+        pop.textContent = `×${combo} COMBO!`;
+        pop.classList.add('show');
+        setTimeout(()=>pop.classList.remove('show'),900);
+      }
+
+      updateHUD();
+      showResultScreen(true, accuracy, timeBonus, roundPts);
+    } else {
+      lives--;
+      combo = 1;
+      updateHUD();
+      if (lives <= 0) {
+        showGameOver();
+      } else {
+        showResultScreen(false, accuracy, 0, 0);
+      }
+    }
+  }, 800);
+}
+
+function showResultScreen(success, accuracy, timeBonus, pts) {
+  showScreen('screen-result');
+
+  const title = document.getElementById('result-title');
+  const sub = document.getElementById('result-sub');
+  if (success) {
+    title.textContent = 'RETRIEVED';
+    title.className = 'result-title win';
+    sub.textContent = 'PATTERN RESTORED · ' + currentChar + ' · ASCII ' + currentChar.charCodeAt(0);
+  } else {
+    title.textContent = 'CORRUPTED';
+    title.className = 'result-title fail';
+    sub.textContent = 'RETRIEVAL INCOMPLETE · LIFE LOST';
+  }
+
+  document.getElementById('r-accuracy').textContent = Math.round(accuracy*100)+'%';
+  document.getElementById('r-accuracy').style.color = accuracy > 0.9 ? 'var(--cyan)' : accuracy > 0.8 ? 'var(--g)' : 'var(--red)';
+  document.getElementById('r-time').textContent = '+'+timeBonus;
+  document.getElementById('r-combo').textContent = '×'+combo;
+  document.getElementById('r-points').textContent = '+'+pts;
+
+  // Draw result canvas
+  drawState(rCanvas, rCtx, playerState, true);
+
+  document.getElementById('result-continue').textContent = lives > 0 ? '▸ NEXT SPECIMEN' : '▸ GAME OVER';
+  if (lives <= 0) {
+    document.getElementById('result-continue').onclick = showGameOver;
+  } else {
+    document.getElementById('result-continue').onclick = nextRound;
+  }
+}
+
+function showGameOver() {
+  showScreen('screen-gameover');
+  document.getElementById('go-score').textContent = String(score).padStart(6,'0');
+  document.getElementById('go-level').textContent = level;
+  document.getElementById('go-specimens').textContent = specimensCleared;
+  document.getElementById('go-combo').textContent = '×'+maxCombo;
+}
+
+// ─── Pass counter label (cosmetic) ───────────────────
+setInterval(() => {
+  if (phase === 'play') {
+    const elapsed = Math.floor((totalTime - timeLeft)/1000);
+    document.getElementById('pass-label').textContent = `PASS: ${String(elapsed).padStart(3,'0')}`;
+  }
+}, 500);
+
+// ─── Sys time ─────────────────────────────────────────
+setInterval(() => {
+  const now = new Date();
+  document.getElementById('sys-time').textContent =
+    now.getHours().toString().padStart(2,'0')+':'+
+    now.getMinutes().toString().padStart(2,'0')+':'+
+    now.getSeconds().toString().padStart(2,'0');
+}, 1000);
+</script>
+</body>
+</html>
